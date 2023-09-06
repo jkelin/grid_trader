@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "grid_trader"
+version = "0.1.0"
+description = ""
+authors = ["Jan Kelin <jan@jkelin.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+uvicorn = {extras = ["standard"], version = "^0.23.2"}
+fastapi = "^0.103.1"
+black = "^23.7.0"
+pandas = "^2.1.0"
+numpy = "1.24"
+numba = "^0.57.1"
+cleo = "^2.0.1"
+ccxt = "^4.0.80"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+infinite_bot = "uvicorn infinite_bot:app --reload"
