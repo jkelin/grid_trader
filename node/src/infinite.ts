@@ -1479,26 +1479,39 @@ async function saveLogs(store: ReturnType<typeof createStore>) {
   }
 }
 
+function registerStatusHandler(store: ReturnType<typeof createStore>) {
+  fastify.get("/", {
+    async handler(request, reply) {
+      const state = store.getState();
+      return {
+        equity:
+          state.tusd &&
+          state.btc &&
+          state.lastTrade &&
+          state.tusd.free
+            .add(state.tusd.locked)
+            .add(state.btc.free.times(state.lastTrade.price))
+            .add(state.btc.locked.times(state.lastTrade.price)),
+        state: state,
+      };
+    },
+  });
+}
+
 async function main() {
   console.info("Starting");
 
   const abortController = new AbortController();
   const store = createStore(abortController.signal);
 
-  fastify.get("/", {
-    async handler(request, reply) {
-      return {
-        state: store.getState(),
-      };
-    },
-  });
+  registerStatusHandler(store);
 
   await fastify.listen({
     port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
     host: "0.0.0.0",
   });
 
-  closeWithGrace(
+  const close = closeWithGrace(
     {
       delay: 5000,
     },
@@ -1519,6 +1532,11 @@ async function main() {
       console.log("All done");
     }
   );
+
+  // setTimeout(() => {
+  //   console.log("Periodic close");
+  //   close.close();
+  // }, 10 * 60 * 1000);
 
   await closeAll();
 
