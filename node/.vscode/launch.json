@@ -5,7 +5,7 @@
       "request": "launch",
       "name": "Infinite",
       "runtimeArgs": ["--loader", "ts-node/esm"],
-      "args": ["${workspaceFolder}/src/infinite.ts"]
+      "args": ["${workspaceFolder}/src/infinite2.ts"]
     },
     {
       "type": "node",

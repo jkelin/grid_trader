@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "type": "module",
-  "license": "MIT",
   "dependencies": {
     "@opencensus/core": "^0.1.0",
     "@opencensus/exporter-prometheus": "^0.1.0",
     "@swc/core": "^1.3.82",
     "@swc/helpers": "^0.5.1",
+    "@types/node": "^20.5.7",
     "awesome-debounce-promise": "^2.1.0",
     "binance": "^2.8.9",
     "close-with-grace": "^1.2.0",
@@ -17,22 +17,18 @@
     "dotenv": "^16.3.1",
     "exit-hook": "^4.0.0",
     "fastify": "^4.22.0",
-    "got": "11",
+    "got": "^13.0.0",
     "immutable": "^5.0.0-beta.4",
     "pino-pretty": "^10.2.0",
     "regenerator-runtime": "^0.14.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.2.2",
-    "uuidv7": "^0.6.2"
-  },
-  "devDependencies": {
-    "@types/node": "^20.5.7"
+    "uuidv7": "^0.6.2",
+    "vitest": "^0.34.3"
   },
   "scripts": {
-    "build": "tsc",
-    "dev:scratchpad": "node --loader ts-node/esm --inspect src/scratchpad.ts",
-    "dev:infinite": "node --loader ts-node/esm --inspect src/infinite.js",
-    "dev:grid": "node --loader ts-node/esm --inspect src/grid.ts"
+    "start": "node --trace-deprecation -r dotenv/config --loader ts-node/esm src/index.ts",
+    "test": "vitest"
   },
   "packageManager": "yarn@3.6.3"
 }
