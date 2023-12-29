@@ -16,7 +16,7 @@ export interface UpdateSettingsAction {
 export interface UpdateBalance {
   readonly type: "updateBalance";
   readonly payload: {
-    readonly tusd: Balance;
+    readonly fdusd: Balance;
     readonly btc: Balance;
   };
 }
@@ -45,7 +45,7 @@ export interface State {
   readonly currentLevelIndex: number;
   readonly targetTotalLevels: number;
 
-  readonly tusd?: Balance;
+  readonly fdusd?: Balance;
   readonly btc?: Balance;
   readonly orders: ReadonlyArray<Order>;
   readonly lastTrade?: {

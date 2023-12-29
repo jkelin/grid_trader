@@ -14,11 +14,16 @@ import { Decimal } from "decimal.js";
 import { isStateInitialized } from "./store.js";
 import { State, ReducerContext, Order, Action } from "./types.js";
 import {
+  dheader,
   measurementExecutionReport,
   measurementOutboundAccountPosition,
   parseCustomId,
 } from "./helpers.js";
-import { cancelOrder, createOrderAtLevel } from "./client.js";
+import {
+  cancelOrder,
+  createOrderAtLevel,
+  ignoreCancellationErrorOrderIds,
+} from "./client.js";
 
 export function isWsFormattedMarginUserDataEvent(
   data: WsFormattedMessage
@@ -75,7 +80,7 @@ export function updateBalances(
   return {
     ...state,
     btc: "BTC" in balances ? balances["BTC"] : state.btc,
-    tusd: "TUSD" in balances ? balances["TUSD"] : state.tusd,
+    fdusd: "FDUSD" in balances ? balances["FDUSD"] : state.fdusd,
   };
 }
 
@@ -102,6 +107,44 @@ export function updateOrders(
 
   switch (data.orderStatus) {
     case "NEW":
+      const order = state.orders.find((x) => x.customId === customId.id);
+      if (order && order.customState == "CREATING") {
+        console.log(
+          dheader(),
+          "Order created",
+          data.side,
+          customId.level,
+          "q:",
+          data.quantity,
+          "@",
+          data.price,
+          data.originalClientOrderId
+        );
+
+        if (order.side == "SELL") {
+          state = {
+            ...state,
+            btc: state.btc
+              ? {
+                  ...state.btc,
+                  free: state.btc.free.minus(data.quantity),
+                  locked: state.btc.locked.plus(data.quantity),
+                }
+              : state.btc,
+          };
+        } else {
+          state = {
+            ...state,
+            fdusd: state.fdusd
+              ? {
+                  ...state.fdusd,
+                  free: state.fdusd.free.minus(data.quantity * data.price),
+                  locked: state.fdusd.locked.plus(data.quantity * data.price),
+                }
+              : state.fdusd,
+          };
+        }
+      }
     case "PARTIALLY_FILLED":
       return {
         ...state,
@@ -121,13 +164,18 @@ export function updateOrders(
       };
     case "FILLED":
       console.log(
+        dheader(),
         "Order filled",
         data.side,
         customId.level,
+        "q:",
         data.quantity,
         "@",
-        data.price
+        data.price,
+        data.originalClientOrderId
       );
+
+      ignoreCancellationErrorOrderIds.add(data.orderId);
     default:
       return {
         ...state,
@@ -218,7 +266,9 @@ export function cancelOutdatedOrders(
 
   if (orders.length > 5) {
     const currentOrderLevels = new Set(
-      orders.filter((x) => x.customState !== "CANCELLING").map((x) => x.level)
+      orders
+        // .filter((x) => x.customState !== "CANCELLING")
+        .map((x) => x.level)
     );
     const missingOrderLevels = [...new Array(orders.length)]
       .map((_, i) =>
@@ -232,12 +282,28 @@ export function cancelOutdatedOrders(
       missingOrderLevels.length -
       orders.filter((x) => x.customState === "CANCELLING").length;
 
-    const ordersToCancel = orders
-      .filter((x) => x.customState === "ACTIVE")
-      .slice(0, numberOfOrdersToCancel);
+    if (numberOfOrdersToCancel > 0) {
+      const ordersToCancel = orders
+        .filter((x) => x.customState === "ACTIVE")
+        .slice(0, numberOfOrdersToCancel);
 
-    for (const order of ordersToCancel) {
-      state = cancel(state, order);
+      if (ordersToCancel.length) {
+        console.log(
+          dheader(),
+          "Cancelling",
+          side,
+          "orders",
+          ordersToCancel.map((x) => x.level),
+          "because levels",
+          missingOrderLevels,
+          "are missing. Current levels:",
+          [...currentOrderLevels].join(", ")
+        );
+
+        for (const order of ordersToCancel) {
+          state = cancel(state, order);
+        }
+      }
     }
   }
 
@@ -248,60 +314,63 @@ export function cancelOutdatedOrders(
 // export function getFreeCapital({
 //   orders,
 //   btc,
-//   tusd,
-// }: Required<Pick<State, "orders" | "btc" | "tusd">>) {
+//   fdusd,
+// }: Required<Pick<State, "orders" | "btc" | "fdusd">>) {
 //   const lockedBtc = orders
 //     .filter((x) => x.side === "SELL")
 //     .reduce((sum, x) => sum.add(x.quantity), new Decimal(0));
 
-//   const lockedTusd = orders
+//   const lockedfdusd = orders
 //     .filter((x) => x.side === "BUY")
 //     .reduce((sum, x) => sum.add(x.quantity.times(x.price)), new Decimal(0));
 
 //   return {
 //     btc: btc.free.plus(btc.locked).minus(Decimal.max(lockedBtc, btc.locked)),
-//     tusd: tusd.free
-//       .plus(tusd.locked)
-//       .minus(Decimal.max(lockedTusd, tusd.locked)),
+//     fdusd: fdusd.free
+//       .plus(fdusd.locked)
+//       .minus(Decimal.max(lockedfdusd, fdusd.locked)),
 //   };
 // }
 
 export function getFreeCapital({
   orders,
   btc,
-  tusd,
-}: Required<Pick<State, "orders" | "btc" | "tusd">>) {
+  fdusd,
+}: Required<Pick<State, "orders" | "btc" | "fdusd">>) {
   const additionalLockedBtc = orders
     .filter((x) => x.side === "SELL" && x.customState === "CREATING")
     .reduce((sum, x) => sum.add(x.quantity), new Decimal(0));
 
-  const additionalLockedTusd = orders
+  const additionalLockedfdusd = orders
     .filter((x) => x.side === "BUY" && x.customState === "CREATING")
     .reduce((sum, x) => sum.add(x.quantity.times(x.price)), new Decimal(0));
 
   return {
     btc: btc.free.minus(additionalLockedBtc),
-    tusd: tusd.free.minus(additionalLockedTusd),
+    fdusd: fdusd.free.minus(additionalLockedfdusd),
   };
 }
 
 export function getTotalEquity({
   btc,
-  tusd,
+  fdusd,
   lastTrade,
-}: Required<Pick<State, "btc" | "tusd" | "lastTrade">>) {
-  return tusd.free
-    .add(tusd.locked)
+}: Required<Pick<State, "btc" | "fdusd" | "lastTrade">>) {
+  return fdusd.free
+    .add(fdusd.locked)
     .add(btc.free.times(lastTrade.price))
     .add(btc.locked.times(lastTrade.price));
 }
+
+const safe_pct = 0.2;
+const btc_min_unit = 0.0002;
 
 export function createMissingOrders(
   state: State &
     Required<
       Pick<
         State,
-        "levelSizeQuote" | "currentLevelPrice" | "lastTrade" | "btc" | "tusd"
+        "levelSizeQuote" | "currentLevelPrice" | "lastTrade" | "btc" | "fdusd"
       >
     >,
   { promise }: ReducerContext
@@ -347,12 +416,26 @@ export function createMissingOrders(
       .times(0.95)
       .div(state.targetTotalLevels);
 
-    if (freeCapital.tusd.gt(orderQuoteQuantity.times(0.95))) {
+    const safeUsd = freeCapital.fdusd
+      .minus(totalEquity.times(safe_pct))
+      .clamp(0, totalEquity);
+
+    if (safeUsd.gt(orderQuoteQuantity.times(0.95))) {
       const level = getNextAvailableLevel(state, "BUY");
 
-      if (freeCapital.tusd.lte(orderQuoteQuantity.times(1.05))) {
-        orderQuoteQuantity = freeCapital.tusd;
+      if (safeUsd.lte(orderQuoteQuantity.times(1 + 0.95))) {
+        orderQuoteQuantity = safeUsd;
       }
+
+      console.log(dheader(), "Creating BUY order", {
+        safeUsd,
+        freeCapital,
+        price: level.price,
+        level: level.level,
+        orderQuoteQuantity,
+        orderBaseQuantity,
+        totalEquity,
+      });
 
       state = {
         ...state,
@@ -370,9 +453,22 @@ export function createMissingOrders(
     if (freeCapital.btc.gt(orderBaseQuantity)) {
       const level = getNextAvailableLevel(state, "SELL");
 
-      if (freeCapital.btc.lte(orderBaseQuantity.times(1.05))) {
-        orderBaseQuantity = freeCapital.btc;
+      if (
+        freeCapital.btc.lte(orderBaseQuantity.times(1.05).add(btc_min_unit))
+      ) {
+        orderBaseQuantity = freeCapital.btc.sub(btc_min_unit);
       }
+
+      console.log(dheader(), "Creating SELL order", {
+        xx: state.btc,
+        // yy: state.orders.filter((x) => x.side == "SELL"),
+        freeCapital,
+        price: level.price,
+        level: level.level,
+        orderQuoteQuantity,
+        orderBaseQuantity,
+        totalEquity,
+      });
 
       state = {
         ...state,
@@ -383,7 +479,7 @@ export function createMissingOrders(
     }
 
     runawayCounter += 1;
-    if (runawayCounter > 100) {
+    if (runawayCounter > 20) {
       throw new Error("Runaway loop detected in createMissingOrders");
     }
   } while (lastState !== state);
@@ -426,9 +522,21 @@ export function updateCurrentIndex(
 
   let runawayCounter = 0;
   while (lastTrade.price.gte(currentLevelPrice.add(levelSizeQuote))) {
+    console.log(
+      dheader(),
+      "Moving level up to",
+      currentLevelIndex + 1,
+      currentLevelPrice.add(levelSizeQuote),
+      "because",
+      lastTrade.price,
+      ">",
+      currentLevelPrice,
+      "+",
+      levelSizeQuote
+    );
+
     currentLevelIndex += 1;
     currentLevelPrice = currentLevelPrice.add(levelSizeQuote);
-    console.log("Moving level up to", currentLevelIndex, currentLevelPrice);
 
     runawayCounter += 1;
     if (runawayCounter > 100) {
@@ -440,9 +548,21 @@ export function updateCurrentIndex(
 
   runawayCounter = 0;
   while (lastTrade.price.lte(currentLevelPrice.sub(levelSizeQuote))) {
+    console.log(
+      dheader(),
+      "Moving level down to",
+      currentLevelIndex - 1,
+      currentLevelPrice.sub(levelSizeQuote),
+      "because",
+      lastTrade.price,
+      "<",
+      currentLevelPrice,
+      "-",
+      levelSizeQuote
+    );
+
     currentLevelIndex -= 1;
     currentLevelPrice = currentLevelPrice.sub(levelSizeQuote);
-    console.log("Moving level down to", currentLevelIndex, currentLevelPrice);
 
     runawayCounter += 1;
     if (runawayCounter > 100) {
@@ -502,7 +622,7 @@ export function reducer(
   } else if (action.type === "updateBalance") {
     state = {
       ...state,
-      tusd: action.payload.tusd,
+      fdusd: action.payload.fdusd,
       btc: action.payload.btc,
     };
   } else {

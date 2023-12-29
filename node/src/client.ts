@@ -6,7 +6,7 @@ import {
   WebsocketClient,
   generateNewOrderId,
 } from "binance";
-import { customIdToLevel } from "./helpers.js";
+import { customIdToLevel, dheader } from "./helpers.js";
 import { Agent as HttpAgent } from "http";
 import { Agent as HttpsAgent } from "https";
 import got from "got";
@@ -37,16 +37,18 @@ export const binanceSocketClient = new WebsocketClient(
 );
 
 binanceSocketClient.on("open", (data) => {
-  console.info("ws connection opened");
+  console.info(dheader(), "ws connection opened");
 });
 
 binanceSocketClient.on("reconnecting", (data) => {
-  console.debug("ws reconnecting");
+  console.debug(dheader(), "ws reconnecting");
 });
 
 binanceSocketClient.on("reconnected", (data) => {
-  console.debug("ws reconnected");
+  console.debug(dheader(), "ws reconnected");
 });
+
+export const ignoreCancellationErrorOrderIds = new Set<number>();
 
 export async function createOrderAtLevel({
   price,
@@ -74,6 +76,7 @@ export async function createOrderAtLevel({
 
     try {
       console.debug(
+        dheader(),
         "Creating",
         side,
         "order at level",
@@ -84,7 +87,7 @@ export async function createOrderAtLevel({
       );
 
       const resp = await binanceClient.marginAccountNewOrder({
-        symbol: "BTCTUSD",
+        symbol: "BTCFDUSD",
         side,
         type: "LIMIT",
         quantity: buyQuantity.toNumber(),
@@ -99,12 +102,16 @@ export async function createOrderAtLevel({
     } catch (err) {
       if ((err as any).code === -1021) {
         console.log(
-          "Failed to place order, timestamp for this request is outside of the recvWindow. Retrying."
+          dheader(),
+          "Failed to place order",
+          level,
+          ", timestamp for this request is outside of the recvWindow. Retrying."
         );
 
         continue;
       } else {
         console.error(
+          dheader(),
           "Failed to place order",
           {
             price,
@@ -123,7 +130,8 @@ export async function createOrderAtLevel({
 
 export async function cancelOrder(order: Order) {
   console.log(
-    "Closing",
+    dheader(),
+    "Cancelling",
     order.side,
     "order",
     order.level,
@@ -135,13 +143,26 @@ export async function cancelOrder(order: Order) {
   try {
     await binanceClient.marginAccountCancelOrder({
       isIsolated: "FALSE",
-      symbol: "BTCTUSD",
+      symbol: "BTCFDUSD",
       orderId: order.id,
     });
   } catch (err) {
-    console.error("Failed to cancel order", order, err);
+    if (
+      (err as any).code === -2011 &&
+      order.id &&
+      ignoreCancellationErrorOrderIds.has(order.id)
+    ) {
+      console.log(
+        dheader(),
+        "Failed to cancel order",
+        order.level,
+        "because it was already filled."
+      );
+    } else {
+      console.error(dheader(), "Failed to cancel order", order, err);
 
-    throw err;
+      throw err;
+    }
   }
 }
 
@@ -150,7 +171,7 @@ export async function delay(ms: number) {
 }
 
 export async function fetchBalance() {
-  console.info("Refetching balance");
+  console.info(dheader(), "Refetching balance");
 
   try {
     const data = await binanceClient.queryCrossMarginAccountDetails();
@@ -167,31 +188,31 @@ export async function fetchBalance() {
 
     return {
       btc: balances["BTC"],
-      tusd: balances["TUSD"],
+      fdusd: balances["FDUSD"],
     };
   } catch (err) {
-    console.error("Failed to fetch balance", err);
+    console.error(dheader(), "Failed to fetch balance", err);
     throw err;
   }
 }
 
 export async function closeAll() {
   try {
-    console.log("Close all");
+    console.log(dheader(), "Close all");
 
     const openOrders = await binanceClient.queryMarginAccountOpenOrders({
-      symbol: "BTCTUSD",
+      symbol: "BTCFDUSD",
       isIsolated: "FALSE",
     });
 
     if (openOrders.length) {
-      console.info("Cancelling open orders");
+      console.info(dheader(), "Cancelling open orders");
       await binanceClient.marginAccountCancelOpenOrders({
-        symbol: "BTCTUSD",
+        symbol: "BTCFDUSD",
         isIsolated: "FALSE",
       });
     } else {
-      console.log("No open orders to close");
+      console.log(dheader(), "No open orders to close");
     }
 
     let balances = await fetchBalance();
@@ -201,10 +222,10 @@ export async function closeAll() {
     }
 
     if (balances.btc.free.gt(0.0003)) {
-      console.info("Selling off BTC balance");
+      console.info(dheader(), "Selling off BTC balance");
 
       await binanceClient.marginAccountNewOrder({
-        symbol: "BTCTUSD",
+        symbol: "BTCFDUSD",
         side: "SELL",
         type: "MARKET",
         quantity: balances.btc.free
@@ -213,12 +234,12 @@ export async function closeAll() {
         newOrderRespType: "FULL",
       });
     } else {
-      console.log("Not enough BTC to sell");
+      console.log(dheader(), "Not enough BTC to sell");
     }
 
-    console.log("Closed");
+    console.log(dheader(), "Closed");
   } catch (err) {
-    console.error("Failed to close all", err);
+    console.error(dheader(), "Failed to close all", err);
     throw err;
   }
 }
@@ -247,7 +268,12 @@ export async function keepUpdatingSettingsFromAPI(
       });
 
       if (resp.statusCode !== 200) {
-        console.log("Failed to fetch settings", resp.statusCode, resp.body);
+        console.log(
+          dheader(),
+          "Failed to fetch settings",
+          resp.statusCode,
+          resp.body
+        );
         await delay(250);
         continue;
       }
@@ -268,9 +294,9 @@ export async function keepUpdatingSettingsFromAPI(
       await delay(250);
     }
 
-    console.info("Stopped updating settings from API");
+    console.info(dheader(), "Stopped updating settings from API");
   } catch (err) {
-    console.error("Error while updating settings from API", err);
+    console.error(dheader(), "Error while updating settings from API", err);
     throw err;
   }
 }

@@ -18,9 +18,9 @@ async def run_main():
 
     exchange = ccxtpro.binance({"newUpdates": True})
     exchange.options["tradesLimit"] = 10000
-    await exchange.watch_trades("BTC/TUSD")
+    await exchange.watch_trades("BTC/FDUSD")
 
-    trades = await exchange.fetch_trades("BTC/TUSD", limit=10000)
+    trades = await exchange.fetch_trades("BTC/FDUSD", limit=10000)
     trades = pd.DataFrame(trades)
     trades["timestamp"] = pd.to_datetime(trades["timestamp"], unit="ms", utc=True)
     trades = trades.set_index("id")
@@ -30,7 +30,7 @@ async def run_main():
 
     try:
         while True:
-            trades = await exchange.watch_trades("BTC/TUSD")
+            trades = await exchange.watch_trades("BTC/FDUSD")
 
             with trades_lock:
                 global_trades.loc[trades[-1]["id"]] = {

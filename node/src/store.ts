@@ -1,6 +1,41 @@
 import { uuidv7 } from "uuidv7";
 import { Action, ReducerContext, State } from "./types.js";
 import { List } from "immutable";
+import { dheader } from "./helpers.js";
+
+function printLevels(state: State) {
+  console.log(
+    dheader(),
+    "Current level",
+    state.currentLevelIndex,
+    "BUY:",
+    state.orders
+      .filter((x) => x.side === "BUY")
+      .map((x) => x.level)
+      .toSorted((a, b) => a - b)
+      .join(", "),
+    "SELL:",
+    state.orders
+      .filter((x) => x.side === "SELL")
+      .map((x) => x.level)
+      .toSorted((a, b) => a - b)
+      .join(", ")
+  );
+}
+
+function printBalance(state: State) {
+  console.log(
+    dheader(),
+    "USDT:",
+    state.fdusd?.free,
+    "+",
+    state.fdusd?.locked,
+    "; BTC:",
+    state.btc?.free,
+    "+",
+    state.btc?.locked
+  );
+}
 
 export function createStore(
   reducer: (action: Action, state: State, ctx: ReducerContext) => State,
@@ -101,11 +136,15 @@ export function createStore(
             },
           });
 
-          console.error("Error while handling state change promise", {
-            action,
-            oldState,
-            newState,
-          });
+          console.error(
+            dheader(),
+            "Error while handling state change promise",
+            {
+              action,
+              oldState,
+              newState,
+            }
+          );
           throw error;
         }
       })
@@ -153,12 +192,20 @@ export function createStore(
         dispatch,
       });
 
+      if (currentState.orders != newState.orders) {
+        printLevels(newState);
+      }
+
+      if (currentState.btc != newState.btc || state.fdusd != newState.fdusd) {
+        printBalance(newState);
+      }
+
       state = newState;
 
       try {
         validateState(newState);
       } catch (err) {
-        console.error("Invalid state", {
+        console.error(dheader(), "Invalid state", {
           err,
           action,
           currentState,
@@ -182,7 +229,7 @@ export function createStore(
 
       await handlePromises(promises, currentState, newState, action);
     } catch (err) {
-      console.error("Error while handling action", {
+      console.error(dheader(), "Error while handling action", {
         err,
         action,
         state: currentState,
@@ -206,7 +253,7 @@ export function isStateInitialized(state: State): state is Required<State> {
   return !!(
     state.levelSizeQuote &&
     state.currentLevelPrice &&
-    state.tusd &&
+    state.fdusd &&
     state.btc &&
     state.lastTrade
   );

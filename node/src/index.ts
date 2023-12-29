@@ -12,6 +12,7 @@ import {
   fetchBalance,
   keepUpdatingSettingsFromAPI,
 } from "./client.js";
+import { dheader } from "./helpers.js";
 
 const fastify = Fastify({
   logger: {
@@ -38,7 +39,7 @@ async function saveLogs(store: ReturnType<typeof createStore>) {
       )
     );
 
-    console.log("Wrting logs into", filename);
+    console.log(dheader(), "Wrting logs into", filename);
 
     try {
       await fs.mkdir(filename.replace(basename(filename), ""), {
@@ -52,7 +53,7 @@ async function saveLogs(store: ReturnType<typeof createStore>) {
 
     await fs.writeFile(filename, logs, "utf-8");
   } catch (err) {
-    console.log("Failed to save logs", err);
+    console.log(dheader(), "Failed to save logs", err);
   }
 }
 
@@ -62,11 +63,11 @@ function registerStatusHandler(store: ReturnType<typeof createStore>) {
       const state = store.getState();
       return {
         equity:
-          state.tusd &&
+          state.fdusd &&
           state.btc &&
           state.lastTrade &&
-          state.tusd.free
-            .add(state.tusd.locked)
+          state.fdusd.free
+            .add(state.fdusd.locked)
             .add(state.btc.free.times(state.lastTrade.price))
             .add(state.btc.locked.times(state.lastTrade.price)),
         state: state,
@@ -76,7 +77,7 @@ function registerStatusHandler(store: ReturnType<typeof createStore>) {
 }
 
 async function main() {
-  console.info("Starting");
+  console.info(dheader(), "Starting");
 
   const abortController = new AbortController();
   const store = createStore(reducer, abortController.signal);
@@ -94,19 +95,19 @@ async function main() {
     },
     async ({ signal, err, manual }) => {
       if (err) {
-        console.error("Error", err);
+        console.error(dheader(), "Error", err);
       }
 
-      console.info("Stopping");
+      console.info(dheader(), "Stopping");
       try {
         abortController.abort();
         binanceSocketClient.closeAll();
         await Promise.all([closeAll(), saveLogs(store), fastify.close()]);
       } catch (err) {
-        console.error("Error while closing", err);
+        console.error(dheader(), "Error while closing app", err);
       }
 
-      console.log("All done");
+      console.log(dheader(), "All done");
     }
   );
 
@@ -138,10 +139,10 @@ async function main() {
 
   await Promise.all([
     binanceSocketClient.subscribeMarginUserDataStream(),
-    binanceSocketClient.subscribeAggregateTrades("BTCTUSD", "spot"),
+    binanceSocketClient.subscribeAggregateTrades("BTCFDUSD", "spot"),
   ]);
 
-  console.info("Started");
+  console.info(dheader(), "Started");
 }
 
 await main();

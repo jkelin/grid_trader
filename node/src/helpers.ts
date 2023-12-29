@@ -1,4 +1,5 @@
 import { MeasureUnit, globalStats } from "@opencensus/core";
+import { format } from "date-fns";
 
 export const measurementExecutionReport = globalStats.createMeasureDouble(
   "latency/executionReport",
@@ -27,4 +28,8 @@ export function parseCustomId(...ids: string[]) {
   }
 
   return undefined;
+}
+
+export function dheader() {
+  return `[${format(new Date(), "HH:mm:ss.SSS")}]`;
 }
