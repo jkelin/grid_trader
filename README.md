@@ -1,22 +1,29 @@
-# Binance HFT Grid Trading Bot
+# Binance High-Frequency Trading (HFT) Grid Trading Bot
 
-> While this thing is profitable in backtests, I've never managed to make any actual money with it
+> Disclaimer: While this bot has shown profitability in backtests, the author has not successfully generated actual profits with it in live trading.
 
-This is an automated market making bot that profits from times of extreme volatility by placing and replacing orders in an infinite (moving) grid. When the price moves outside the current grid, orders furthest from the price are updated and positions are closed.
-It makes money during sideways market with volatility higher than spread. It looses money during prolonged directional swings.
+This automated market-making bot is designed to capitalize on periods of extreme volatility by placing and replacing orders within an infinite (moving) grid. When the price moves outside the current grid, orders furthest from the price are updated, and positions are closed.
 
-It makes extreme number of orders and trades so it needs an environment with 0 trading fees. In practice this means that it can only run on binance spot/margin during 0 fees promotions.
+The bot is profitable during sideways markets with volatility higher than the spread. However, it tends to lose money during prolonged directional price movements.
+
+Due to the extremely high number of orders and trades executed, this bot requires an environment with zero trading fees. In practice, this means it can only operate on Binance spot/margin markets during zero-fee promotions.
 
 ### Architecture
 
-There is a Node.js HFT runtime/execution part and a Pyhon analysis settings server. The idea is that market analysis and stats settings are going to be available over an API and the runtime will periodically refresh them.
+The system consists of two main components:
+1. A Node.js HFT runtime/execution module
+2. A Python analysis settings server
 
-In practice the python part only really provides the number of levels and the level size based on some interpolated values that I've found to work during the backtest.
+The concept is that market analysis and statistical settings are made available via an API, which the runtime periodically refreshes.
 
-The Node runtime connects directly to the exchange using Binance websocket protocol and makes trades/orders as fast as possible.
+In practice, the Python component primarily provides the number of grid levels and the level size, based on interpolated values that have proven effective during backtesting.
 
-Architectonically it is based on Redux/reducer pattern where there is an immutable state which gets modified by events from the exchange and then fires side effects (such as open/update exchange orders).
-This is great for debugging because the whole aplication state can be logged after every event/action which makes debbuging easyish. Binance has many quirks and diagnosing timing issues is not fun.
+The Node.js runtime establishes a direct connection to the exchange using the Binance WebSocket protocol, executing trades and orders as quickly as possible.
 
-I was worried about performance (speed) when processing hundreds of updates a second and basically allocating huge objects for each of them, but it worked out extremely quick.
-I've however observed ~80ms to the exchange even when sitting in the same DC (AWS Tokio) which makes most of the performance discussions moot.
+Architecturally, the system is based on the Redux/reducer pattern, featuring an immutable state that is modified by events from the exchange. These modifications then trigger side effects (such as opening or updating exchange orders).
+
+This approach greatly facilitates debugging, as the entire application state can be logged after each event/action, making the diagnosis of issues relatively straightforward. Given Binance's numerous quirks, this is particularly helpful when troubleshooting timing-related problems.
+
+Initially, there were concerns about performance (speed) when processing hundreds of updates per second and allocating large objects for each of them. However, the system has proven to be extremely quick in practice.
+
+That said, the author has observed latencies of approximately 80ms to the exchange, even when operating within the same data center (AWS Tokyo). This significant latency renders most performance optimizations relatively insignificant in comparison.
