@@ -2,7 +2,7 @@
 
 > While this thing is profitable in backtests, I've never managed to make any actual money with it
 
-This is an automated market making bot that profits from times of extreme volatility by placing and replacing orders in an infinite (moving) grid. When the price moves outside the current grid, orders furthest from the grid are updated and positions are closed.
+This is an automated market making bot that profits from times of extreme volatility by placing and replacing orders in an infinite (moving) grid. When the price moves outside the current grid, orders furthest from the price are updated and positions are closed.
 It makes money during sideways market with volatility higher than spread. It looses money during prolonged directional swings.
 
 It makes extreme number of orders and trades so it needs an environment with 0 trading fees. In practice this means that it can only run on binance spot/margin during 0 fees promotions.
